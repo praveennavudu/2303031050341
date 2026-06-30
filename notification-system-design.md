@@ -154,3 +154,74 @@ VALUES
 
 DELETE FROM notifications
 WHERE notification_id = ?;
+
+
+
+# Stage 3
+
+## Query Analysis
+
+### Given Query
+
+```sql
+SELECT *
+FROM notifications
+WHERE studentID = 1042
+AND isRead = false
+ORDER BY createdAt ASC;
+```
+
+### Is the Query Accurate?
+
+Yes. The query correctly fetches unread notifications for a specific student ordered by creation time.
+
+### Why is it Slow?
+
+- The table contains millions of records.
+- Using `SELECT *` fetches unnecessary columns.
+- Without a composite index, the database scans many rows.
+- Sorting by `createdAt` becomes expensive if the matching rows are not already indexed.
+
+### Improvements
+
+- Select only the required columns instead of using `SELECT *`.
+- Create a composite index on `(studentID, isRead, createdAt)`.
+- Use pagination (`LIMIT` and `OFFSET`) when displaying notifications.
+
+### Optimized Query
+
+```sql
+SELECT notification_id,
+       notification_type,
+       message,
+       created_at
+FROM notifications
+WHERE studentID = 1042
+AND isRead = false
+ORDER BY createdAt ASC;
+```
+
+### Computation Cost
+
+- Without indexes: O(N)
+- With composite index: approximately O(log N) to locate matching rows, plus the cost of returning the result set.
+
+### Should Every Column Have an Index?
+
+No.
+
+Adding indexes on every column is not recommended because:
+
+- It increases storage usage.
+- INSERT, UPDATE, and DELETE operations become slower.
+- Many indexes are never used.
+- Only columns frequently used in WHERE, JOIN, or ORDER BY clauses should be indexed.
+
+### Query to Find Students Who Received Placement Notifications in the Last 7 Days
+
+```sql
+SELECT DISTINCT studentID
+FROM notifications
+WHERE notification_type = 'Placement'
+AND createdAt >= NOW() - INTERVAL '7 days';
+```
