@@ -225,3 +225,91 @@ FROM notifications
 WHERE notification_type = 'Placement'
 AND createdAt >= NOW() - INTERVAL '7 days';
 ```
+
+
+
+# Stage 4
+
+## Problem
+
+Fetching notifications directly from the database on every page load causes excessive database load, increased response time, and poor user experience as the number of users grows.
+
+## Solution 1: Redis Cache
+
+Store recently accessed notifications in Redis. When a user requests notifications, first check Redis. If data exists, return it directly. Otherwise, fetch from the database, store it in Redis, and return the response.
+
+### Advantages
+
+- Very fast response time
+- Reduces database load
+- Scales well for frequent reads
+
+### Disadvantages
+
+- Extra infrastructure
+- Cache invalidation must be handled properly
+
+---
+
+## Solution 2: Pagination
+
+Instead of loading all notifications, fetch only a limited number at a time.
+
+Example:
+
+```
+GET /notifications?page=1&limit=20
+```
+
+### Advantages
+
+- Less data transferred
+- Faster response
+- Lower memory usage
+
+### Disadvantages
+
+- Multiple requests may be required for older notifications
+
+---
+
+## Solution 3: Read Replicas
+
+Use database read replicas for read operations while keeping writes on the primary database.
+
+### Advantages
+
+- Distributes database load
+- Better scalability
+
+### Disadvantages
+
+- Replication delay may occur
+
+---
+
+## Solution 4: Real-Time Updates
+
+Use WebSockets so the client receives new notifications instantly instead of repeatedly requesting all notifications.
+
+### Advantages
+
+- Eliminates unnecessary polling
+- Better user experience
+
+### Disadvantages
+
+- More complex implementation
+- Persistent connections consume server resources
+
+---
+
+## Recommended Architecture
+
+Client
+↓
+Redis Cache
+↓
+Primary Database
+
+New notifications are pushed through WebSockets while historical notifications are fetched using paginated API endpoints. Read replicas handle read-heavy workloads, and Redis caches frequently accessed notification data.
