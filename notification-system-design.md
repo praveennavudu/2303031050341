@@ -313,3 +313,116 @@ Redis Cache
 Primary Database
 
 New notifications are pushed through WebSockets while historical notifications are fetched using paginated API endpoints. Read replicas handle read-heavy workloads, and Redis caches frequently accessed notification data.
+
+
+
+
+# Stage 5
+
+## Problems with the Current Implementation
+
+The current implementation processes each student sequentially, making it slow and inefficient for large-scale notifications.
+
+### Shortcomings
+
+- Sequential execution increases response time.
+- A failure in one step may stop processing for remaining students.
+- No retry mechanism for failed emails.
+- No parallel processing.
+- No message queue.
+- Difficult to scale for thousands of students.
+
+---
+
+## What if Email Fails for 200 Students?
+
+The failed emails should not be ignored.
+
+Instead:
+
+- Save failure information.
+- Retry automatically after a delay.
+- Retry a fixed number of times.
+- Move permanently failed messages to a Dead Letter Queue (DLQ).
+- Allow administrators to inspect and reprocess failed notifications.
+
+---
+
+## Should Saving to DB and Sending Email Happen Together?
+
+No.
+
+Saving the notification and sending the email should be separated.
+
+Reason:
+
+- Saving to the database is the source of truth.
+- Email delivery is an external service and may fail.
+- If email fails, the notification should still exist in the database.
+- Independent processing improves reliability and scalability.
+
+---
+
+## Improved Architecture
+
+Client
+↓
+Notification Service
+↓
+Save Notification to Database
+↓
+Publish Message to Queue (RabbitMQ/Kafka)
+↓
+-------------------------------
+|             |               |
+Email Worker  Push Worker  Retry Worker
+|             |               |
+Email API   WebSocket     Dead Letter Queue
+
+---
+
+## Improved Pseudocode
+
+```python
+function notify_all(student_ids, message):
+
+    for student_id in student_ids:
+
+        save_to_db(student_id, message)
+
+        publish_to_queue({
+            "student_id": student_id,
+            "message": message
+        })
+
+
+EmailWorker():
+
+    while queue is not empty:
+
+        job = queue.pop()
+
+        try:
+
+            send_email(job.student_id, job.message)
+
+            push_notification(job.student_id, job.message)
+
+        except Exception:
+
+            retry(job)
+
+            if retry_limit_exceeded:
+
+                move_to_dead_letter_queue(job)
+```
+
+## Advantages
+
+- Reliable
+- Highly scalable
+- Faster processing
+- Supports retries
+- Fault tolerant
+- Easy to monitor
+- Better user experience
